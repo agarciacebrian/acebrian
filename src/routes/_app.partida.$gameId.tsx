@@ -181,9 +181,10 @@ function PartidaPage() {
             <Textarea
               value={action}
               onChange={(e) => setAction(e.target.value)}
-              placeholder="Escribe lo que haces. Sin opciones cerradas. El mundo reaccionará."
+              placeholder="Escribe lo que haces este trimestre. Sin opciones cerradas. El mundo reaccionará."
               rows={2}
               className="font-mono resize-none"
+              disabled={submitting}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleAction();
               }}
@@ -195,7 +196,9 @@ function PartidaPage() {
             className="font-mono uppercase tracking-wider h-[60px]"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            <span className="ml-2 hidden sm:inline">Ejecutar</span>
+            <span className="ml-2 hidden sm:inline">
+              {submitting ? "Procesando trimestre…" : "Ejecutar"}
+            </span>
           </Button>
         </div>
       </div>
