@@ -64,7 +64,7 @@ export function RoleplayModal({ open, onClose, gameId, game }: Props) {
     const conv = parseConvocados(convocadosRaw);
     if (!conv.length) { toast.error("No se entendió ningún convocado"); return; }
 
-    const { data, error } = await (supabase.from("roleplay_sessions") as any).insert({
+    const { data, error } = await supabase.from("roleplay_sessions").insert({
       game_id: gameId, opened_at_turn: game.turn_number,
       convocados: conv, topic: topic.trim(), status: "abierta",
     }).select("*").single();
