@@ -65,8 +65,11 @@ export function RoleplayModal({ open, onClose, gameId, game }: Props) {
     if (!conv.length) { toast.error("No se entendió ningún convocado"); return; }
 
     const { data, error } = await supabase.from("roleplay_sessions").insert({
-      game_id: gameId, opened_at_turn: game.turn_number,
-      convocados: conv, topic: topic.trim(), status: "abierta",
+      game_id: gameId,
+      opened_at_turn: game.turn_number,
+      convocados: conv as unknown as never,
+      topic: topic.trim(),
+      status: "abierta",
     }).select("*").single();
     if (error) { toast.error(error.message); return; }
 
