@@ -68,24 +68,32 @@ function PartidaPage() {
   const handleAction = async () => {
     if (!action.trim()) return;
     setSubmitting(true);
-    // FASE 1: solo registramos la acción como evento. El motor IA llega en fase 2.
-    const { error } = await supabase.from("game_events").insert({
-      game_id: gameId,
-      turn_number: game.turn_number,
-      lore_date: game.lore_date,
-      category: "accion_jugador",
-      title: "Acción del jugador",
-      body: action.trim(),
-      severity: "info",
-    });
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success("Acción registrada. El motor IA llegará en la siguiente fase.");
-      setAction("");
-      void load();
+    try {
+      const { data, error } = await supabase.functions.invoke("game-turn", {
+        body: { gameId, action: action.trim() },
+      });
+      if (error) {
+        // Intenta parsear el mensaje de error del edge
+        const ctx = (error as any)?.context;
+        let msg = error.message;
+        if (ctx && typeof ctx.json === "function") {
+          try { const j = await ctx.json(); if (j?.error) msg = j.error; } catch {}
+        }
+        toast.error(msg || "Error procesando el turno");
+      } else {
+        toast.success(
+          data?.lore_date
+            ? `Trimestre cerrado. Nueva fecha: ${data.lore_date}`
+            : "Turno procesado",
+        );
+        setAction("");
+        await load();
+      }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Error procesando el turno");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   if (loading) {
@@ -173,9 +181,10 @@ function PartidaPage() {
             <Textarea
               value={action}
               onChange={(e) => setAction(e.target.value)}
-              placeholder="Escribe lo que haces. Sin opciones cerradas. El mundo reaccionará."
+              placeholder="Escribe lo que haces este trimestre. Sin opciones cerradas. El mundo reaccionará."
               rows={2}
               className="font-mono resize-none"
+              disabled={submitting}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleAction();
               }}
@@ -187,7 +196,9 @@ function PartidaPage() {
             className="font-mono uppercase tracking-wider h-[60px]"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            <span className="ml-2 hidden sm:inline">Ejecutar</span>
+            <span className="ml-2 hidden sm:inline">
+              {submitting ? "Procesando trimestre…" : "Ejecutar"}
+            </span>
           </Button>
         </div>
       </div>

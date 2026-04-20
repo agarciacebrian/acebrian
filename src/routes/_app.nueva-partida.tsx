@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { buildMeetingSchedule } from "@/lib/calendar";
 
 export const Route = createFileRoute("/_app/nueva-partida")({
   component: NuevaPartidaPage,
@@ -120,6 +121,21 @@ function NuevaPartidaPage() {
         actors: [{ name: territoryName, flag }],
         severity: "info",
       });
+
+      // Calendario anual obligatorio (SEGIB, UE, OTAN, G20, AGNU, Davos, etc.)
+      const schedule = buildMeetingSchedule(game.lore_date, territoryCode, 1);
+      if (schedule.length > 0) {
+        await supabase.from("scheduled_meetings").insert(
+          schedule.map((m) => ({
+            game_id: game.id,
+            organization: m.organization,
+            meeting_type: m.meeting_type,
+            scheduled_date: m.scheduled_date,
+            agenda: m.agenda,
+            status: "pendiente",
+          })),
+        );
+      }
 
       toast.success("Partida creada");
       navigate({ to: "/partida/$gameId", params: { gameId: game.id } });
