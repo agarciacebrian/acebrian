@@ -14,7 +14,308 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      capabilities: {
+        Row: {
+          category: string
+          created_at: string
+          deployed_at_turn: number
+          description: string | null
+          effects: Json
+          game_id: string
+          id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          deployed_at_turn: number
+          description?: string | null
+          effects?: Json
+          game_id: string
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          deployed_at_turn?: number
+          description?: string | null
+          effects?: Json
+          game_id?: string
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capabilities_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      country_seeds: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          flag_emoji: string
+          initial_capabilities: Json
+          initial_rankings: Json
+          initial_state: Json
+          name: string
+          organizations: Json
+          region: string
+          type: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          flag_emoji: string
+          initial_capabilities?: Json
+          initial_rankings: Json
+          initial_state: Json
+          name: string
+          organizations?: Json
+          region: string
+          type?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          flag_emoji?: string
+          initial_capabilities?: Json
+          initial_rankings?: Json
+          initial_state?: Json
+          name?: string
+          organizations?: Json
+          region?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      game_events: {
+        Row: {
+          actors: Json
+          body: string
+          category: string
+          created_at: string
+          game_id: string
+          id: string
+          lore_date: string
+          severity: string
+          title: string
+          turn_number: number
+        }
+        Insert: {
+          actors?: Json
+          body: string
+          category: string
+          created_at?: string
+          game_id: string
+          id?: string
+          lore_date: string
+          severity?: string
+          title: string
+          turn_number: number
+        }
+        Update: {
+          actors?: Json
+          body?: string
+          category?: string
+          created_at?: string
+          game_id?: string
+          id?: string
+          lore_date?: string
+          severity?: string
+          title?: string
+          turn_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_events_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_state_snapshots: {
+        Row: {
+          created_at: string
+          cyber: Json
+          defense: Json
+          energy: Json
+          game_id: string
+          id: string
+          lore_date: string
+          macro: Json
+          rankings: Json
+          rankings_delta: Json
+          social: Json
+          soft_power: Json
+          strategic: Json
+          turn_number: number
+        }
+        Insert: {
+          created_at?: string
+          cyber?: Json
+          defense?: Json
+          energy?: Json
+          game_id: string
+          id?: string
+          lore_date: string
+          macro?: Json
+          rankings?: Json
+          rankings_delta?: Json
+          social?: Json
+          soft_power?: Json
+          strategic?: Json
+          turn_number: number
+        }
+        Update: {
+          created_at?: string
+          cyber?: Json
+          defense?: Json
+          energy?: Json
+          game_id?: string
+          id?: string
+          lore_date?: string
+          macro?: Json
+          rankings?: Json
+          rankings_delta?: Json
+          social?: Json
+          soft_power?: Json
+          strategic?: Json
+          turn_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_state_snapshots_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      games: {
+        Row: {
+          created_at: string
+          difficulty: string
+          flag_emoji: string
+          id: string
+          lore_date: string
+          status: string
+          territory_code: string
+          territory_name: string
+          turn_number: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          difficulty?: string
+          flag_emoji?: string
+          id?: string
+          lore_date?: string
+          status?: string
+          territory_code: string
+          territory_name: string
+          turn_number?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          difficulty?: string
+          flag_emoji?: string
+          id?: string
+          lore_date?: string
+          status?: string
+          territory_code?: string
+          territory_name?: string
+          turn_number?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          player_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          player_name?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          player_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      scheduled_meetings: {
+        Row: {
+          agenda: string | null
+          created_at: string
+          game_id: string
+          id: string
+          meeting_type: string
+          organization: string
+          outcome: string | null
+          scheduled_date: string
+          status: string
+        }
+        Insert: {
+          agenda?: string | null
+          created_at?: string
+          game_id: string
+          id?: string
+          meeting_type: string
+          organization: string
+          outcome?: string | null
+          scheduled_date: string
+          status?: string
+        }
+        Update: {
+          agenda?: string | null
+          created_at?: string
+          game_id?: string
+          id?: string
+          meeting_type?: string
+          organization?: string
+          outcome?: string | null
+          scheduled_date?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_meetings_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
