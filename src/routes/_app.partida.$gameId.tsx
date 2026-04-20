@@ -3,11 +3,12 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Send, Loader2, Globe2 } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Globe2, Users } from "lucide-react";
 import { StatePanels } from "@/components/sim/StatePanels";
 import { EventsFeed } from "@/components/sim/EventsFeed";
 import { CapabilitiesPanel } from "@/components/sim/CapabilitiesPanel";
 import { MeetingsPanel } from "@/components/sim/MeetingsPanel";
+import { RoleplayModal } from "@/components/sim/RoleplayModal";
 import { fmtDate } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -26,6 +27,7 @@ function PartidaPage() {
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [roleplayOpen, setRoleplayOpen] = useState(false);
 
   useEffect(() => {
     void load();
@@ -190,18 +192,41 @@ function PartidaPage() {
               }}
             />
           </div>
-          <Button
-            onClick={handleAction}
-            disabled={submitting || !action.trim()}
-            className="font-mono uppercase tracking-wider h-[60px]"
-          >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            <span className="ml-2 hidden sm:inline">
-              {submitting ? "Procesando trimestre…" : "Ejecutar"}
-            </span>
-          </Button>
+          <div className="flex flex-col gap-1">
+            <Button
+              onClick={handleAction}
+              disabled={submitting || !action.trim()}
+              className="font-mono uppercase tracking-wider h-[28px]"
+              size="sm"
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              <span className="ml-2 hidden sm:inline text-[0.65rem]">
+                {submitting ? "Procesando…" : "Ejecutar"}
+              </span>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setRoleplayOpen(true)}
+              disabled={submitting}
+              className="font-mono uppercase tracking-wider h-[28px] border-[color:var(--warning)]/50 text-[color:var(--warning)] hover:bg-[color:var(--warning)]/10"
+              size="sm"
+            >
+              <Users className="h-4 w-4" />
+              <span className="ml-2 hidden sm:inline text-[0.65rem]">Rolear</span>
+            </Button>
+          </div>
         </div>
       </div>
+
+      <RoleplayModal
+        open={roleplayOpen}
+        gameId={gameId}
+        game={game}
+        onClose={(didCloseQuarter) => {
+          setRoleplayOpen(false);
+          if (didCloseQuarter) void load();
+        }}
+      />
     </div>
   );
 }
