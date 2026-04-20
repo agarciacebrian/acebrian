@@ -272,6 +272,91 @@ export type Database = {
         }
         Relationships: []
       }
+      roleplay_messages: {
+        Row: {
+          actor_flag: string | null
+          actor_name: string | null
+          content: string
+          created_at: string
+          id: string
+          role: string
+          session_id: string
+        }
+        Insert: {
+          actor_flag?: string | null
+          actor_name?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          role: string
+          session_id: string
+        }
+        Update: {
+          actor_flag?: string | null
+          actor_name?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          role?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roleplay_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "roleplay_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roleplay_sessions: {
+        Row: {
+          closed_at: string | null
+          convocados: Json
+          created_at: string
+          exchange_count: number
+          game_id: string
+          id: string
+          opened_at_turn: number
+          status: string
+          summary: string | null
+          topic: string
+        }
+        Insert: {
+          closed_at?: string | null
+          convocados?: Json
+          created_at?: string
+          exchange_count?: number
+          game_id: string
+          id?: string
+          opened_at_turn: number
+          status?: string
+          summary?: string | null
+          topic: string
+        }
+        Update: {
+          closed_at?: string | null
+          convocados?: Json
+          created_at?: string
+          exchange_count?: number
+          game_id?: string
+          id?: string
+          opened_at_turn?: number
+          status?: string
+          summary?: string | null
+          topic?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roleplay_sessions_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scheduled_meetings: {
         Row: {
           agenda: string | null
