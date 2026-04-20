@@ -68,24 +68,32 @@ function PartidaPage() {
   const handleAction = async () => {
     if (!action.trim()) return;
     setSubmitting(true);
-    // FASE 1: solo registramos la acción como evento. El motor IA llega en fase 2.
-    const { error } = await supabase.from("game_events").insert({
-      game_id: gameId,
-      turn_number: game.turn_number,
-      lore_date: game.lore_date,
-      category: "accion_jugador",
-      title: "Acción del jugador",
-      body: action.trim(),
-      severity: "info",
-    });
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success("Acción registrada. El motor IA llegará en la siguiente fase.");
-      setAction("");
-      void load();
+    try {
+      const { data, error } = await supabase.functions.invoke("game-turn", {
+        body: { gameId, action: action.trim() },
+      });
+      if (error) {
+        // Intenta parsear el mensaje de error del edge
+        const ctx = (error as any)?.context;
+        let msg = error.message;
+        if (ctx && typeof ctx.json === "function") {
+          try { const j = await ctx.json(); if (j?.error) msg = j.error; } catch {}
+        }
+        toast.error(msg || "Error procesando el turno");
+      } else {
+        toast.success(
+          data?.lore_date
+            ? `Trimestre cerrado. Nueva fecha: ${data.lore_date}`
+            : "Turno procesado",
+        );
+        setAction("");
+        await load();
+      }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Error procesando el turno");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   if (loading) {
