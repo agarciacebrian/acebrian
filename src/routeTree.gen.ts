@@ -14,6 +14,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppPartidasRouteImport } from './routes/_app.partidas'
 import { Route as AppNuevaPartidaRouteImport } from './routes/_app.nueva-partida'
+import { Route as AppPartidaGameIdRouteImport } from './routes/_app.partida.$gameId'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -39,18 +40,25 @@ const AppNuevaPartidaRoute = AppNuevaPartidaRouteImport.update({
   path: '/nueva-partida',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPartidaGameIdRoute = AppPartidaGameIdRouteImport.update({
+  id: '/partida/$gameId',
+  path: '/partida/$gameId',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/nueva-partida': typeof AppNuevaPartidaRoute
   '/partidas': typeof AppPartidasRoute
+  '/partida/$gameId': typeof AppPartidaGameIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/nueva-partida': typeof AppNuevaPartidaRoute
   '/partidas': typeof AppPartidasRoute
+  '/partida/$gameId': typeof AppPartidaGameIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -59,12 +67,13 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_app/nueva-partida': typeof AppNuevaPartidaRoute
   '/_app/partidas': typeof AppPartidasRoute
+  '/_app/partida/$gameId': typeof AppPartidaGameIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/nueva-partida' | '/partidas'
+  fullPaths: '/' | '/auth' | '/nueva-partida' | '/partidas' | '/partida/$gameId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/nueva-partida' | '/partidas'
+  to: '/' | '/auth' | '/nueva-partida' | '/partidas' | '/partida/$gameId'
   id:
     | '__root__'
     | '/'
@@ -72,6 +81,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_app/nueva-partida'
     | '/_app/partidas'
+    | '/_app/partida/$gameId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -117,17 +127,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNuevaPartidaRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/partida/$gameId': {
+      id: '/_app/partida/$gameId'
+      path: '/partida/$gameId'
+      fullPath: '/partida/$gameId'
+      preLoaderRoute: typeof AppPartidaGameIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
   AppNuevaPartidaRoute: typeof AppNuevaPartidaRoute
   AppPartidasRoute: typeof AppPartidasRoute
+  AppPartidaGameIdRoute: typeof AppPartidaGameIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppNuevaPartidaRoute: AppNuevaPartidaRoute,
   AppPartidasRoute: AppPartidasRoute,
+  AppPartidaGameIdRoute: AppPartidaGameIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -140,3 +159,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
