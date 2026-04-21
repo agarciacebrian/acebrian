@@ -1,4 +1,9 @@
-// Cierra una sesión de rol: resume, aplica como acción del jugador y avanza el trimestre.
+// Cierra una sesión de rol: resume y registra el evento.
+// IMPORTANTE: NO avanza el trimestre. Una reunión, por sí sola, no consume tiempo de gobierno.
+// El avance temporal está reservado al motor `game-turn` (botón "Ejecutar").
+// Aquí solo: 1) pedir un resumen breve a la IA, 2) registrar evento informativo,
+// 3) ajuste muy leve de afinidad/diplomacia (rankings_delta acotado a ±1 en soft_power/autonomia)
+//    aplicado SOBRE el snapshot del trimestre actual sin crear uno nuevo ni cambiar la fecha.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
@@ -7,36 +12,25 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_TURN = `Eres el MOTOR DE SIMULACIÓN GEOPOLÍTICA DURA. Acaba de cerrarse una reunión que ha tenido el jefe de Estado con actores concretos. Procesa el trimestre considerando la reunión como acción principal, pero también deja que el mundo viva su vida (2-5 eventos del mundo, no todos relacionados).
+const SYSTEM = `Eres el director de una simulación geopolítica. Acaba de cerrarse una REUNIÓN entre el jefe de Estado y actores convocados. La reunión NO avanza el tiempo del juego: solo deja un poso diplomático.
+
+Tu salida es un JSON estricto, en español, sin texto extra:
+{
+  "narrative": "2-3 frases muy concretas sobre qué deja la reunión: posturas, tensiones, compromisos verbales o ausencia de ellos. Sin floritura.",
+  "diplomatic_shift": {
+    "soft_power_delta": n,   // entero entre -1 y 1
+    "autonomia_delta": n,    // entero entre -1 y 1
+    "confort_diplomatico_delta": n  // entero entre -2 y 2
+  },
+  "follow_up_hooks": [
+    "Frase corta describiendo un gancho narrativo que la IA del próximo trimestre debería tener en cuenta."
+  ]
+}
 
 Reglas:
-- Realista, cínico, no complaciente. Reacciones proporcionales y coherentes.
-- Indicadores macro evolucionan según lo discutido y el contexto, sin saltos absurdos.
-- Tiempo avanza UN TRIMESTRE.
-- Idioma: español.
-
-Devuelves JSON EXACTO sin texto extra:
-{
-  "narrative": "Resumen 2-4 frases de qué deja la reunión y el trimestre.",
-  "events": [{"category":"...","title":"...","body":"...","severity":"info|normal|alerta|critico","actors":[{"name":"...","flag":"..."}]}],
-  "state_patch": {
-    "macro": {"pib_usd_bn":n,"deuda_pct_pib":n,"deficit_pct_pib":n,"paro_pct":n,"inflacion_pct":n},
-    "energy": {"renovables_pct":n,"dependencia_ext_pct":n,"resiliencia":n,"mix":"s"},
-    "defense": {"gasto_pct_pib":n,"ejercito_score":n,"marina_score":n,"aire_score":n,"personal":n},
-    "cyber": {"defensa":n,"ofensiva":n,"inteligencia":n},
-    "soft_power": {"prestigio_int":n,"prestigio_ext":n,"marca_pais":n,"idiomas_score":n},
-    "social": {"idh":n,"demografia_score":n,"estabilidad_interna":n},
-    "strategic": {"autonomia":n,"sobreextension":n,"confort_diplomatico":n}
-  },
-  "rankings_delta": {"economia":n,"ejercito":n,"marina":n,"ciber":n,"soft_power":n,"renovables":n,"idh":n,"autonomia":n},
-  "new_capabilities": []
-}
-rankings_delta: deltas -5..+5. Scores 0-100.`;
-
-function addQuarter(d: string): string {
-  const x = new Date(d); x.setMonth(x.getMonth() + 3);
-  return x.toISOString().slice(0, 10);
-}
+- NO inventes cambios macro (PIB, paro, etc). Esto NO es un cierre de trimestre.
+- Los deltas son pequeños porque hablar no es gobernar.
+- Si la reunión fue puramente expositiva sin acuerdos, los deltas pueden ser todos 0.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -63,17 +57,6 @@ serve(async (req) => {
     const game = session.games;
     const { data: msgs } = await supabase
       .from("roleplay_messages").select("*").eq("session_id", sessionId).order("created_at");
-    const { data: snaps } = await supabase
-      .from("game_state_snapshots").select("*").eq("game_id", game.id)
-      .order("turn_number", { ascending: false }).limit(1);
-    const lastSnapshot = snaps?.[0];
-    if (!lastSnapshot) throw new Error("Falta snapshot");
-
-    const { data: caps } = await supabase
-      .from("capabilities").select("*").eq("game_id", game.id).eq("status", "activa");
-    const { data: recentEvs } = await supabase
-      .from("game_events").select("*").eq("game_id", game.id)
-      .order("created_at", { ascending: false }).limit(10);
 
     const transcriptTxt = (msgs ?? []).map((m: any) => {
       if (m.role === "user") return `[${game.territory_name}] ${m.content}`;
@@ -83,27 +66,11 @@ serve(async (req) => {
     const convocadosTxt = (session.convocados ?? []).map((c: any) =>
       `- ${c.name}${c.flag ? ` ${c.flag}` : ""}${c.role ? ` (${c.role})` : ""}`).join("\n") || "(no especificado)";
 
-    const nextLoreDate = addQuarter(game.lore_date);
-    const nextTurn = game.turn_number + 1;
+    const userPrompt = `CONTEXTO:
+Territorio: ${game.territory_name} ${game.flag_emoji}
+Turno actual (NO avanza): ${game.turn_number} | Fecha lore: ${game.lore_date}
 
-    const userPrompt = `CONTEXTO DE PARTIDA:
-Territorio: ${game.territory_name} (${game.territory_code}) ${game.flag_emoji}
-Turno: ${game.turn_number} → ${nextTurn} | Fecha: ${game.lore_date} → ${nextLoreDate}
-
-ESTADO ACTUAL:
-${JSON.stringify({
-  macro: lastSnapshot.macro, energy: lastSnapshot.energy, defense: lastSnapshot.defense,
-  cyber: lastSnapshot.cyber, soft_power: lastSnapshot.soft_power, social: lastSnapshot.social,
-  strategic: lastSnapshot.strategic, rankings: lastSnapshot.rankings,
-}, null, 2)}
-
-CAPACIDADES:
-${(caps ?? []).map((c: any) => `- ${c.name} (${c.category})`).join("\n") || "(ninguna)"}
-
-ÚLTIMOS EVENTOS:
-${(recentEvs ?? []).map((e: any) => `[T${e.turn_number}] ${e.title}`).join("\n") || "(arranque)"}
-
-REUNIÓN QUE ACABA DE CERRARSE
+REUNIÓN
 Tema: ${session.topic}
 Convocados:
 ${convocadosTxt}
@@ -111,14 +78,14 @@ ${convocadosTxt}
 TRANSCRIPCIÓN:
 ${transcriptTxt}
 
-Procesa el trimestre. Devuelve JSON estricto.`;
+Devuelve el JSON estricto descrito en el sistema.`;
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [{ role: "system", content: SYSTEM_TURN }, { role: "user", content: userPrompt }],
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "system", content: SYSTEM }, { role: "user", content: userPrompt }],
         response_format: { type: "json_object" },
       }),
     });
@@ -133,82 +100,85 @@ Procesa el trimestre. Devuelve JSON estricto.`;
 
     const aiJson = await aiRes.json();
     const content = aiJson?.choices?.[0]?.message?.content;
-    let parsed: any;
+    let parsed: any = {};
     try { parsed = JSON.parse(content); }
     catch {
       const m = content?.match(/\{[\s\S]*\}/);
-      if (!m) throw new Error("IA no devolvió JSON");
-      parsed = JSON.parse(m[0]);
+      if (m) parsed = JSON.parse(m[0]);
     }
 
-    const patch = parsed.state_patch ?? {};
-    const rd = parsed.rankings_delta ?? {};
-    const prevRank = (lastSnapshot.rankings ?? {}) as Record<string, number>;
-    const newRankings: Record<string, number> = {};
-    for (const k of Object.keys(prevRank)) {
-      const d = typeof rd[k] === "number" ? rd[k] : 0;
-      newRankings[k] = Math.max(0, Math.min(100, (prevRank[k] ?? 50) + d));
+    const narrative: string = parsed.narrative ?? "Reunión cerrada sin compromisos formales.";
+    const shift = parsed.diplomatic_shift ?? {};
+    const clamp = (n: any, lo: number, hi: number) => {
+      const v = typeof n === "number" ? Math.round(n) : 0;
+      return Math.max(lo, Math.min(hi, v));
+    };
+    const sp = clamp(shift.soft_power_delta, -1, 1);
+    const au = clamp(shift.autonomia_delta, -1, 1);
+    const cd = clamp(shift.confort_diplomatico_delta, -2, 2);
+
+    // Aplicar ajuste leve sobre el snapshot ACTUAL (mismo turno, misma fecha) sin crear uno nuevo.
+    if (sp !== 0 || au !== 0 || cd !== 0) {
+      const { data: snaps } = await supabase
+        .from("game_state_snapshots").select("*").eq("game_id", game.id)
+        .order("turn_number", { ascending: false }).limit(1);
+      const snap = snaps?.[0];
+      if (snap) {
+        const rankings = { ...(snap.rankings ?? {}) } as Record<string, number>;
+        if (sp !== 0 && typeof rankings.soft_power === "number") {
+          rankings.soft_power = Math.max(0, Math.min(100, rankings.soft_power + sp));
+        }
+        if (au !== 0 && typeof rankings.autonomia === "number") {
+          rankings.autonomia = Math.max(0, Math.min(100, rankings.autonomia + au));
+        }
+        const strategic = { ...(snap.strategic ?? {}) } as Record<string, any>;
+        if (cd !== 0 && typeof strategic.confort_diplomatico === "number") {
+          strategic.confort_diplomatico = Math.max(0, Math.min(100, strategic.confort_diplomatico + cd));
+        }
+        await supabase.from("game_state_snapshots")
+          .update({ rankings, strategic })
+          .eq("id", snap.id);
+      }
     }
 
-    await supabase.from("game_state_snapshots").insert({
-      game_id: game.id, turn_number: nextTurn, lore_date: nextLoreDate,
-      macro: patch.macro ?? lastSnapshot.macro,
-      energy: patch.energy ?? lastSnapshot.energy,
-      defense: patch.defense ?? lastSnapshot.defense,
-      cyber: patch.cyber ?? lastSnapshot.cyber,
-      soft_power: patch.soft_power ?? lastSnapshot.soft_power,
-      social: patch.social ?? lastSnapshot.social,
-      strategic: patch.strategic ?? lastSnapshot.strategic,
-      rankings: newRankings, rankings_delta: rd,
-    });
-
-    // Evento: resumen de la reunión
+    // Evento informativo (mismo turno, misma fecha — NO avanza)
     await supabase.from("game_events").insert({
-      game_id: game.id, turn_number: nextTurn, lore_date: nextLoreDate,
+      game_id: game.id, turn_number: game.turn_number, lore_date: game.lore_date,
       category: "diplomatico",
-      title: `Reunión cerrada — ${session.topic}`,
-      body: `Convocados: ${(session.convocados ?? []).map((c: any) => c.name).join(", ") || "—"}. Intercambios: ${session.exchange_count}.`,
+      title: `Reunión — ${session.topic}`,
+      body: `${narrative}\n\nConvocados: ${(session.convocados ?? []).map((c: any) => c.name).join(", ") || "—"}. Intercambios: ${session.exchange_count}.`,
       severity: "info",
       actors: session.convocados ?? [],
     });
 
-    if (parsed.narrative) {
-      await supabase.from("game_events").insert({
-        game_id: game.id, turn_number: nextTurn, lore_date: nextLoreDate,
-        category: "evaluacion",
-        title: `Trimestre cerrado — ${nextLoreDate}`,
-        body: parsed.narrative, severity: "info",
-      });
-    }
-
-    const worldEvents = Array.isArray(parsed.events) ? parsed.events : [];
-    for (const ev of worldEvents) {
-      await supabase.from("game_events").insert({
-        game_id: game.id, turn_number: nextTurn, lore_date: nextLoreDate,
-        category: ev.category ?? "mundo",
-        title: ev.title ?? "Evento", body: ev.body ?? "",
-        severity: ev.severity ?? "normal", actors: ev.actors ?? [],
-      });
-    }
-
-    const newCaps = Array.isArray(parsed.new_capabilities) ? parsed.new_capabilities : [];
-    for (const c of newCaps) {
-      await supabase.from("capabilities").insert({
-        game_id: game.id, name: c.name, category: c.category ?? "industrial",
-        description: c.description ?? null, effects: c.effects ?? {},
-        deployed_at_turn: nextTurn, status: "activa",
-      });
-    }
-
-    await supabase.from("games").update({
-      turn_number: nextTurn, lore_date: nextLoreDate, updated_at: new Date().toISOString(),
-    }).eq("id", game.id);
+    // Guardar resumen + ganchos en la sesión para que el próximo `game-turn` los recoja
+    const hooks = Array.isArray(parsed.follow_up_hooks) ? parsed.follow_up_hooks.slice(0, 4) : [];
+    const fullSummary = hooks.length > 0
+      ? `${narrative}\n\nGanchos: ${hooks.map((h: string) => `• ${h}`).join(" ")}`
+      : narrative;
 
     await supabase.from("roleplay_sessions").update({
-      status: "cerrada", summary: parsed.narrative ?? null, closed_at: new Date().toISOString(),
+      status: "cerrada", summary: fullSummary, closed_at: new Date().toISOString(),
     }).eq("id", sessionId);
 
-    return new Response(JSON.stringify({ ok: true, turn: nextTurn, lore_date: nextLoreDate, narrative: parsed.narrative }), {
+    // Si la reunión vino de una solicitud entrante, marcarla como resuelta
+    await supabase.from("incoming_requests")
+      .update({
+        status: "aceptada",
+        resolved_at: new Date().toISOString(),
+        resolved_session_id: sessionId,
+        resolution_note: narrative,
+      })
+      .eq("game_id", game.id)
+      .eq("resolved_session_id", sessionId);
+
+    return new Response(JSON.stringify({
+      ok: true,
+      advanced_quarter: false,
+      turn: game.turn_number,
+      lore_date: game.lore_date,
+      narrative,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
