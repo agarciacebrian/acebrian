@@ -278,6 +278,96 @@ serve(async (req) => {
       updated_at: new Date().toISOString(),
     }).eq("id", gameId);
 
+    // Caducar solicitudes pendientes con más de 2 turnos sin atender
+    await supabase.from("incoming_requests")
+      .update({ status: "caducada", resolved_at: new Date().toISOString(), resolution_note: "Sin respuesta a tiempo" })
+      .eq("game_id", gameId)
+      .eq("status", "pendiente")
+      .lte("created_at_turn", nextTurn - 2);
+
+    // === Generar solicitudes entrantes (reactivas + agenda propia) ===
+    try {
+      const reqPrompt = `Eres el simulador de RELACIONES INTERNACIONALES. Acaba de cerrarse el trimestre ${nextLoreDate} para ${game.territory_name} ${game.flag_emoji}.
+
+ACCIÓN DEL JUGADOR: """${action.trim()}"""
+
+NARRATIVA DEL TRIMESTRE: ${parsed.narrative ?? "(sin narrativa)"}
+
+EVENTOS CLAVE: ${(parsed.events ?? []).slice(0, 6).map((e: any) => `- ${e.title}`).join("\n")}
+
+Genera entre 0 y 3 SOLICITUDES ENTRANTES de otros actores (países, organizaciones, élites internas) que quieren contactar al jefe de Estado. Mezcla:
+- REACTIVAS: enganchadas a la acción del jugador (ej. plan energético → Portugal pide integrarse, Italia colaborar, Francia preocupada por competencias).
+- AGENDA PROPIA: el actor contacta por sus propios motivos (crisis, elecciones, OPAs, calendario).
+
+Cada solicitud DEBE tener intereses concretos, urgencia coherente y convocados sugeridos realistas (ej. la UE manda comisarios, no a la presidenta para una consulta menor).
+
+Devuelve SOLO JSON sin texto extra:
+{
+  "requests": [
+    {
+      "actor_name": "República Portuguesa",
+      "actor_flag": "🇵🇹",
+      "actor_role": "Primer Ministro",
+      "request_type": "reunion|propuesta|consulta|queja",
+      "urgency": "baja|normal|alta|critica",
+      "topic": "Frase corta tipo titular",
+      "message": "2-3 frases con intereses explícitos. Tono diplomático.",
+      "suggested_attendees": [{"name":"...","flag":"🇵🇹","role":"..."}],
+      "origin": "reactiva|agenda_propia"
+    }
+  ]
+}
+
+Si no hay nada coherente que generar este turno, devuelve {"requests": []}.`;
+
+      const reqRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: "Eres simulador realista de relaciones internacionales. Devuelves JSON estricto." },
+            { role: "user", content: reqPrompt },
+          ],
+          response_format: { type: "json_object" },
+        }),
+      });
+
+      if (reqRes.ok) {
+        const reqJson = await reqRes.json();
+        const reqContent = reqJson?.choices?.[0]?.message?.content;
+        let reqParsed: any = { requests: [] };
+        try { reqParsed = JSON.parse(reqContent); }
+        catch {
+          const m = reqContent?.match(/\{[\s\S]*\}/);
+          if (m) try { reqParsed = JSON.parse(m[0]); } catch {}
+        }
+        const reqs = Array.isArray(reqParsed.requests) ? reqParsed.requests : [];
+        for (const r of reqs.slice(0, 3)) {
+          if (!r.actor_name || !r.message || !r.topic) continue;
+          await supabase.from("incoming_requests").insert({
+            game_id: gameId,
+            created_at_turn: nextTurn,
+            lore_date: nextLoreDate,
+            actor_name: String(r.actor_name).slice(0, 200),
+            actor_flag: r.actor_flag ?? null,
+            actor_role: r.actor_role ?? null,
+            request_type: ["reunion", "propuesta", "consulta", "queja"].includes(r.request_type) ? r.request_type : "reunion",
+            urgency: ["baja", "normal", "alta", "critica"].includes(r.urgency) ? r.urgency : "normal",
+            topic: String(r.topic).slice(0, 300),
+            message: String(r.message).slice(0, 2000),
+            suggested_attendees: Array.isArray(r.suggested_attendees) ? r.suggested_attendees : [],
+            origin: r.origin === "agenda_propia" ? "agenda_propia" : "reactiva",
+            status: "pendiente",
+          });
+        }
+      } else {
+        console.warn("Generación de solicitudes falló (no bloqueante)", reqRes.status);
+      }
+    } catch (reqErr) {
+      console.warn("Error generando solicitudes (no bloqueante):", reqErr);
+    }
+
     return new Response(JSON.stringify({ ok: true, turn: nextTurn, lore_date: nextLoreDate, narrative: parsed.narrative }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
