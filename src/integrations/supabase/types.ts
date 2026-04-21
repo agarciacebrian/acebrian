@@ -251,6 +251,84 @@ export type Database = {
         }
         Relationships: []
       }
+      incoming_requests: {
+        Row: {
+          actor_flag: string | null
+          actor_name: string
+          actor_role: string | null
+          created_at: string
+          created_at_turn: number
+          game_id: string
+          id: string
+          lore_date: string
+          message: string
+          origin: string
+          request_type: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_session_id: string | null
+          status: string
+          suggested_attendees: Json
+          topic: string
+          urgency: string
+        }
+        Insert: {
+          actor_flag?: string | null
+          actor_name: string
+          actor_role?: string | null
+          created_at?: string
+          created_at_turn: number
+          game_id: string
+          id?: string
+          lore_date: string
+          message: string
+          origin?: string
+          request_type?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_session_id?: string | null
+          status?: string
+          suggested_attendees?: Json
+          topic: string
+          urgency?: string
+        }
+        Update: {
+          actor_flag?: string | null
+          actor_name?: string
+          actor_role?: string | null
+          created_at?: string
+          created_at_turn?: number
+          game_id?: string
+          id?: string
+          lore_date?: string
+          message?: string
+          origin?: string
+          request_type?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_session_id?: string | null
+          status?: string
+          suggested_attendees?: Json
+          topic?: string
+          urgency?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incoming_requests_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incoming_requests_resolved_session_id_fkey"
+            columns: ["resolved_session_id"]
+            isOneToOne: false
+            referencedRelation: "roleplay_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
