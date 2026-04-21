@@ -150,7 +150,7 @@ export function RoleplayModal({ open, onClose, gameId, game, prefill }: Props) {
         toast.error(msg ?? "Error cerrando reunión");
         setPhase("chat");
       } else {
-        toast.success(`Trimestre cerrado. Nueva fecha: ${data?.lore_date}`);
+        toast.success("Reunión cerrada. Posturas registradas (no avanza el trimestre).");
         onClose(true);
       }
     } catch (e: any) {
