@@ -91,6 +91,16 @@ export function RoleplayModal({ open, onClose, gameId, game, prefill }: Props) {
     }).select("*").single();
     if (error) { toast.error(error.message); return; }
 
+    // Si viene de una solicitud entrante, marcarla como aceptada
+    if (prefill?.requestId) {
+      await supabase.from("incoming_requests").update({
+        status: "aceptada",
+        resolved_at: new Date().toISOString(),
+        resolved_session_id: data.id,
+        resolution_note: "Reunión abierta",
+      }).eq("id", prefill.requestId);
+    }
+
     setSessionId(data.id); setConvocados(conv); setPhase("chat");
   };
 
