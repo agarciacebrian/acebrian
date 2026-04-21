@@ -150,7 +150,7 @@ export function RoleplayModal({ open, onClose, gameId, game, prefill }: Props) {
         toast.error(msg ?? "Error cerrando reunión");
         setPhase("chat");
       } else {
-        toast.success(`Trimestre cerrado. Nueva fecha: ${data?.lore_date}`);
+        toast.success("Reunión cerrada. Posturas registradas (no avanza el trimestre).");
         onClose(true);
       }
     } catch (e: any) {
@@ -234,7 +234,7 @@ export function RoleplayModal({ open, onClose, gameId, game, prefill }: Props) {
               )}
               {phase === "closing" && (
                 <div className="flex items-center gap-2 text-xs text-primary font-mono p-2 border border-primary/30 rounded">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Cerrando trimestre y aplicando consecuencias…
+                  <Loader2 className="h-3 w-3 animate-spin" /> Cerrando reunión y registrando posturas…
                 </div>
               )}
             </div>
@@ -258,8 +258,9 @@ export function RoleplayModal({ open, onClose, gameId, game, prefill }: Props) {
                   </Button>
                   <Button onClick={closeMeeting} size="sm" variant="default"
                     disabled={phase === "closing" || sending || messages.length === 0}
-                    className="bg-[color:var(--warning)] text-background hover:bg-[color:var(--warning)]/90">
-                    Cerrar reunión (avanza trimestre)
+                    className="bg-[color:var(--warning)] text-background hover:bg-[color:var(--warning)]/90"
+                    title="Registra el resumen y posturas. NO avanza el trimestre.">
+                    Cerrar reunión (no avanza tiempo)
                   </Button>
                 </div>
               </div>
