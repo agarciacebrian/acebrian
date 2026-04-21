@@ -8,7 +8,8 @@ import { StatePanels } from "@/components/sim/StatePanels";
 import { EventsFeed } from "@/components/sim/EventsFeed";
 import { CapabilitiesPanel } from "@/components/sim/CapabilitiesPanel";
 import { MeetingsPanel } from "@/components/sim/MeetingsPanel";
-import { RoleplayModal } from "@/components/sim/RoleplayModal";
+import { RoleplayModal, type RoleplayPrefill } from "@/components/sim/RoleplayModal";
+import { IncomingRequestsPanel, type IncomingRequest } from "@/components/sim/IncomingRequestsPanel";
 import { fmtDate } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -24,10 +25,12 @@ function PartidaPage() {
   const [events, setEvents] = useState<any[]>([]);
   const [caps, setCaps] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
+  const [requests, setRequests] = useState<IncomingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [roleplayOpen, setRoleplayOpen] = useState(false);
+  const [roleplayPrefill, setRoleplayPrefill] = useState<RoleplayPrefill | null>(null);
 
   useEffect(() => {
     void load();
@@ -36,7 +39,7 @@ function PartidaPage() {
 
   const load = async () => {
     setLoading(true);
-    const [{ data: g }, { data: snaps }, { data: evs }, { data: c }, { data: m }] =
+    const [{ data: g }, { data: snaps }, { data: evs }, { data: c }, { data: m }, { data: reqs }] =
       await Promise.all([
         supabase.from("games").select("*").eq("id", gameId).maybeSingle(),
         supabase
@@ -58,13 +61,34 @@ function PartidaPage() {
           .eq("game_id", gameId)
           .order("scheduled_date")
           .limit(10),
+        supabase
+          .from("incoming_requests")
+          .select("*")
+          .eq("game_id", gameId)
+          .eq("status", "pendiente")
+          .order("created_at", { ascending: false })
+          .limit(20),
       ]);
     setGame(g);
     setSnapshot(snaps?.[0] ?? null);
     setEvents(evs ?? []);
     setCaps(c ?? []);
     setMeetings(m ?? []);
+    setRequests((reqs as unknown as IncomingRequest[]) ?? []);
     setLoading(false);
+  };
+
+  const acceptRequest = (req: IncomingRequest) => {
+    const suggested = Array.isArray(req.suggested_attendees) ? req.suggested_attendees : [];
+    const attendees = suggested.length > 0
+      ? suggested
+      : [{ name: req.actor_name, flag: req.actor_flag ?? undefined, role: req.actor_role ?? undefined }];
+    setRoleplayPrefill({
+      topic: req.topic,
+      attendees,
+      requestId: req.id,
+    });
+    setRoleplayOpen(true);
   };
 
   const handleAction = async () => {
@@ -75,7 +99,6 @@ function PartidaPage() {
         body: { gameId, action: action.trim() },
       });
       if (error) {
-        // Intenta parsear el mensaje de error del edge
         const ctx = (error as any)?.context;
         let msg = error.message;
         if (ctx && typeof ctx.json === "function") {
@@ -162,7 +185,12 @@ function PartidaPage() {
 
         {/* Side columns + feed */}
         <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 lg:col-span-8">
+          <div className="col-span-12 lg:col-span-8 space-y-3">
+            <IncomingRequestsPanel
+              requests={requests}
+              onAccept={acceptRequest}
+              onChanged={() => void load()}
+            />
             <EventsFeed events={events} />
           </div>
           <div className="col-span-12 lg:col-span-4 space-y-3">
@@ -206,7 +234,7 @@ function PartidaPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => setRoleplayOpen(true)}
+              onClick={() => { setRoleplayPrefill(null); setRoleplayOpen(true); }}
               disabled={submitting}
               className="font-mono uppercase tracking-wider h-[28px] border-[color:var(--warning)]/50 text-[color:var(--warning)] hover:bg-[color:var(--warning)]/10"
               size="sm"
@@ -222,8 +250,10 @@ function PartidaPage() {
         open={roleplayOpen}
         gameId={gameId}
         game={game}
+        prefill={roleplayPrefill}
         onClose={(didCloseQuarter) => {
           setRoleplayOpen(false);
+          setRoleplayPrefill(null);
           if (didCloseQuarter) void load();
         }}
       />

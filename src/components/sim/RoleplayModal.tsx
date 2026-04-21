@@ -11,16 +11,24 @@ import { cn } from "@/lib/utils";
 interface Convocado { name: string; flag?: string; role?: string }
 interface Msg { id: string; role: string; actor_name: string | null; actor_flag: string | null; content: string }
 
+export interface RoleplayPrefill {
+  topic: string;
+  attendees: Convocado[];
+  requestId?: string;
+  openingMessage?: string;
+}
+
 interface Props {
   open: boolean;
   onClose: (didCloseQuarter: boolean) => void;
   gameId: string;
   game: { territory_name: string; flag_emoji: string; turn_number: number };
+  prefill?: RoleplayPrefill | null;
 }
 
 const MAX = 10;
 
-export function RoleplayModal({ open, onClose, gameId, game }: Props) {
+export function RoleplayModal({ open, onClose, gameId, game, prefill }: Props) {
   const [phase, setPhase] = useState<"setup" | "chat" | "closing">("setup");
   const [topic, setTopic] = useState("");
   const [convocadosRaw, setConvocadosRaw] = useState("");
@@ -37,8 +45,18 @@ export function RoleplayModal({ open, onClose, gameId, game }: Props) {
       setPhase("setup"); setTopic(""); setConvocadosRaw("");
       setSessionId(null); setConvocados([]); setMessages([]);
       setInput(""); setSending(false); setExchangeCount(0);
+      return;
     }
-  }, [open]);
+    // Aplicar prefill al abrir si viene de una solicitud entrante
+    if (prefill) {
+      setTopic(prefill.topic);
+      const raw = prefill.attendees
+        .map(a => `${a.name}${a.flag ? ` ${a.flag}` : ""}${a.role ? ` (${a.role})` : ""}`)
+        .join("\n");
+      setConvocadosRaw(raw);
+      if (prefill.openingMessage) setInput(prefill.openingMessage);
+    }
+  }, [open, prefill]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -72,6 +90,16 @@ export function RoleplayModal({ open, onClose, gameId, game }: Props) {
       status: "abierta",
     }).select("*").single();
     if (error) { toast.error(error.message); return; }
+
+    // Si viene de una solicitud entrante, marcarla como aceptada
+    if (prefill?.requestId) {
+      await supabase.from("incoming_requests").update({
+        status: "aceptada",
+        resolved_at: new Date().toISOString(),
+        resolved_session_id: data.id,
+        resolution_note: "Reunión abierta",
+      }).eq("id", prefill.requestId);
+    }
 
     setSessionId(data.id); setConvocados(conv); setPhase("chat");
   };
