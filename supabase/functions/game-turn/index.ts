@@ -267,7 +267,7 @@ serve(async (req) => {
         turn_number: nextTurn,
         lore_date: nextLoreDate,
         category: "evaluacion",
-        title: `Trimestre cerrado — ${nextLoreDate}`,
+        title: `Avance: ${timeLabel} — ${nextLoreDate}`,
         body: parsed.narrative,
         severity: "info",
       });
