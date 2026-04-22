@@ -224,13 +224,13 @@ function PartidaPage() {
               className="font-mono resize-none"
               disabled={submitting}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleAction();
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) openConfirm();
               }}
             />
           </div>
           <div className="flex flex-col gap-1">
             <Button
-              onClick={handleAction}
+              onClick={openConfirm}
               disabled={submitting || !action.trim()}
               className="font-mono uppercase tracking-wider h-[28px]"
               size="sm"
@@ -264,6 +264,15 @@ function PartidaPage() {
           setRoleplayPrefill(null);
           if (didCloseQuarter) void load();
         }}
+      />
+
+      <ActionConfirmDialog
+        open={confirmOpen}
+        gameId={gameId}
+        action={action.trim()}
+        submitting={submitting}
+        onCancel={() => { if (!submitting) setConfirmOpen(false); }}
+        onConfirm={(ta) => void handleAction(ta)}
       />
     </div>
   );
