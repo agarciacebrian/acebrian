@@ -10,6 +10,7 @@ import { CapabilitiesPanel } from "@/components/sim/CapabilitiesPanel";
 import { MeetingsPanel } from "@/components/sim/MeetingsPanel";
 import { RoleplayModal, type RoleplayPrefill } from "@/components/sim/RoleplayModal";
 import { IncomingRequestsPanel, type IncomingRequest } from "@/components/sim/IncomingRequestsPanel";
+import { ActionConfirmDialog, type TimeAdvance } from "@/components/sim/ActionConfirmDialog";
 import { fmtDate } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -31,6 +32,7 @@ function PartidaPage() {
   const [submitting, setSubmitting] = useState(false);
   const [roleplayOpen, setRoleplayOpen] = useState(false);
   const [roleplayPrefill, setRoleplayPrefill] = useState<RoleplayPrefill | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     void load();
@@ -91,12 +93,17 @@ function PartidaPage() {
     setRoleplayOpen(true);
   };
 
-  const handleAction = async () => {
+  const openConfirm = () => {
+    if (!action.trim()) return;
+    setConfirmOpen(true);
+  };
+
+  const handleAction = async (timeAdvance: TimeAdvance) => {
     if (!action.trim()) return;
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke("game-turn", {
-        body: { gameId, action: action.trim() },
+        body: { gameId, action: action.trim(), timeAdvance },
       });
       if (error) {
         const ctx = (error as any)?.context;
@@ -108,10 +115,11 @@ function PartidaPage() {
       } else {
         toast.success(
           data?.lore_date
-            ? `Trimestre cerrado. Nueva fecha: ${data.lore_date}`
+            ? `Avance ${data.time_label ?? ""}. Nueva fecha: ${data.lore_date}`
             : "Turno procesado",
         );
         setAction("");
+        setConfirmOpen(false);
         await load();
       }
     } catch (e: any) {
@@ -216,13 +224,13 @@ function PartidaPage() {
               className="font-mono resize-none"
               disabled={submitting}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleAction();
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) openConfirm();
               }}
             />
           </div>
           <div className="flex flex-col gap-1">
             <Button
-              onClick={handleAction}
+              onClick={openConfirm}
               disabled={submitting || !action.trim()}
               className="font-mono uppercase tracking-wider h-[28px]"
               size="sm"
@@ -256,6 +264,15 @@ function PartidaPage() {
           setRoleplayPrefill(null);
           if (didCloseQuarter) void load();
         }}
+      />
+
+      <ActionConfirmDialog
+        open={confirmOpen}
+        gameId={gameId}
+        action={action.trim()}
+        submitting={submitting}
+        onCancel={() => { if (!submitting) setConfirmOpen(false); }}
+        onConfirm={(ta) => void handleAction(ta)}
       />
     </div>
   );

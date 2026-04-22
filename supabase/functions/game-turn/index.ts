@@ -16,8 +16,8 @@ REGLAS DURAS:
 - No eres irrazonable: Francia no cierra frontera porque sí, la UE no activa art.7 sin motivo grave. Reacciones proporcionales, coherentes, con intereses explícitos de cada actor.
 - Mercados, élites, ejércitos, sociedades, bloques actúan con lógica propia y memoria de turnos previos.
 - Los indicadores macro NO se manipulan a voluntad del jugador. Son resultado de políticas. Si el jugador "decreta" que sube el PIB, no pasa nada. Si baja impuestos, hay déficit.
-- El tiempo avanza UN TRIMESTRE (3 meses) cada tick salvo que la acción implique algo más corto (reuniones, operaciones puntuales).
-- Eventos del mundo: 2-5 por turno, no todos relacionados con la acción del jugador. El mundo vive su vida.
+- El tiempo avanza la cantidad indicada en el contexto (puede ser días, semanas o meses). ESCALA TODOS los efectos a esa duración: si solo pasan 3 días, no muevas indicadores macro anuales más que un epsilon, y genera 0-2 eventos enfocados; si pasa 1 trimestre completo, genera 3-5 eventos y deltas significativos.
+- Eventos del mundo: cantidad proporcional al tiempo transcurrido. El mundo vive su vida pero en pocos días apenas pasan cosas globales relevantes.
 - Idioma: español por defecto. Si el jugador escribe en otra lengua por rol, puedes espejar.
 - Tono: duro, seco, periodístico/diplomático. Cero ñoñería.
 
@@ -58,6 +58,7 @@ function buildUserPrompt(ctx: any) {
 Territorio del jugador: ${ctx.game.territory_name} (${ctx.game.territory_code}) ${ctx.game.flag_emoji}
 Turno actual: ${ctx.game.turn_number} → avanzará a ${ctx.game.turn_number + 1}
 Fecha lore actual: ${ctx.game.lore_date} → tras tick: ${ctx.next_lore_date}
+TIEMPO TRANSCURRIDO ESTE TICK: ${ctx.time_label} (${ctx.time_days} días aprox). Escala los efectos a esta duración.
 
 ESTADO ACTUAL (último snapshot):
 ${JSON.stringify(ctx.last_snapshot, null, 2)}
@@ -79,11 +80,26 @@ ${ctx.action}
 Procesa el trimestre. Devuelve JSON según el esquema. NADA DE TEXTO FUERA DEL JSON.`;
 }
 
-// Avanza fecha lore un trimestre (3 meses)
-function addQuarter(dateStr: string): string {
+// Avanza fecha lore según unidad/cantidad
+function advanceDate(dateStr: string, unit: "days" | "weeks" | "months", amount: number): string {
   const d = new Date(dateStr);
-  d.setMonth(d.getMonth() + 3);
+  if (unit === "days") d.setDate(d.getDate() + amount);
+  else if (unit === "weeks") d.setDate(d.getDate() + amount * 7);
+  else d.setMonth(d.getMonth() + amount);
   return d.toISOString().slice(0, 10);
+}
+
+function durationDays(unit: "days" | "weeks" | "months", amount: number): number {
+  if (unit === "days") return amount;
+  if (unit === "weeks") return amount * 7;
+  return amount * 30;
+}
+
+function durationLabel(unit: "days" | "weeks" | "months", amount: number): string {
+  const u = unit === "days" ? (amount === 1 ? "día" : "días")
+          : unit === "weeks" ? (amount === 1 ? "semana" : "semanas")
+          : (amount === 1 ? "mes" : "meses");
+  return `${amount} ${u}`;
 }
 
 serve(async (req) => {
@@ -100,13 +116,24 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    const { gameId, action } = await req.json();
+    const { gameId, action, timeAdvance } = await req.json();
     if (!gameId || !action?.trim()) {
       return new Response(JSON.stringify({ error: "gameId y action requeridos" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Validar timeAdvance (con default a trimestre por compatibilidad)
+    const ta = timeAdvance && typeof timeAdvance === "object" ? timeAdvance : { unit: "months", amount: 3 };
+    const unit: "days" | "weeks" | "months" =
+      ta.unit === "days" || ta.unit === "weeks" || ta.unit === "months" ? ta.unit : "months";
+    let amount = Number(ta.amount);
+    if (!Number.isFinite(amount) || amount <= 0) amount = unit === "months" ? 3 : 1;
+    amount = Math.round(amount);
+    if (unit === "days") amount = Math.min(amount, 30);
+    else if (unit === "weeks") amount = Math.min(amount, 12);
+    else amount = Math.min(amount, 12);
 
     // Cargar contexto
     const [{ data: game }, { data: snaps }, { data: caps }, { data: evs }, { data: meets }] =
@@ -122,12 +149,16 @@ serve(async (req) => {
     const lastSnapshot = snaps?.[0];
     if (!lastSnapshot) throw new Error("Falta snapshot inicial");
 
-    const nextLoreDate = addQuarter(game.lore_date);
+    const nextLoreDate = advanceDate(game.lore_date, unit, amount);
     const nextTurn = game.turn_number + 1;
+    const timeDays = durationDays(unit, amount);
+    const timeLabel = durationLabel(unit, amount);
 
     const userPrompt = buildUserPrompt({
       game,
       next_lore_date: nextLoreDate,
+      time_label: timeLabel,
+      time_days: timeDays,
       last_snapshot: {
         macro: lastSnapshot.macro,
         energy: lastSnapshot.energy,
@@ -236,7 +267,7 @@ serve(async (req) => {
         turn_number: nextTurn,
         lore_date: nextLoreDate,
         category: "evaluacion",
-        title: `Trimestre cerrado — ${nextLoreDate}`,
+        title: `Avance: ${timeLabel} — ${nextLoreDate}`,
         body: parsed.narrative,
         severity: "info",
       });
@@ -368,9 +399,13 @@ Si no hay nada coherente que generar este turno, devuelve {"requests": []}.`;
       console.warn("Error generando solicitudes (no bloqueante):", reqErr);
     }
 
-    return new Response(JSON.stringify({ ok: true, turn: nextTurn, lore_date: nextLoreDate, narrative: parsed.narrative }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({
+      ok: true,
+      turn: nextTurn,
+      lore_date: nextLoreDate,
+      narrative: parsed.narrative,
+      time_label: timeLabel,
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("game-turn error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown" }), {
