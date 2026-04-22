@@ -12,25 +12,38 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM = `Eres el director de una simulación geopolítica. Acaba de cerrarse una REUNIÓN entre el jefe de Estado y actores convocados. La reunión NO avanza el tiempo del juego: solo deja un poso diplomático.
+const SYSTEM = `Eres el director de una simulación geopolítica de alto nivel. Acaba de cerrarse una REUNIÓN entre el jefe de Estado y actores convocados. La reunión NO avanza el tiempo del juego.
+
+PRINCIPIO CLAVE: a nivel de jefes de Estado los acuerdos verbales con porcentajes, plazos y reparto claros SE DAN POR CERRADOS Y EN EJECUCIÓN. No existen MoUs, contratos, ni "elevarlo a equipos". Si en la transcripción hay cifras concretas y un "sí" explícito o implícito de las partes, ES UN ACUERDO EFECTIVO y debes registrarlo como tal.
 
 Tu salida es un JSON estricto, en español, sin texto extra:
 {
-  "narrative": "2-3 frases muy concretas sobre qué deja la reunión: posturas, tensiones, compromisos verbales o ausencia de ellos. Sin floritura.",
+  "narrative": "2-3 frases muy concretas sobre qué se acordó (con cifras) o por qué no hubo acuerdo. Sin floritura ni jerga burocrática.",
+  "agreements": [
+    {
+      "title": "Título corto del acuerdo (ej: 'Coordinación energética hispano-portuguesa')",
+      "parties": ["Territorio jugador", "Portugal", "..."],
+      "terms": "Términos concretos: porcentajes, plazos, reparto, condiciones. Una o dos frases.",
+      "scope": "publico|privado|mixto",
+      "status": "cerrado|tentativo|rechazado",
+      "in_force_from": "inmediato|fecha-aproximada"
+    }
+  ],
   "diplomatic_shift": {
     "soft_power_delta": n,   // entero entre -1 y 1
     "autonomia_delta": n,    // entero entre -1 y 1
     "confort_diplomatico_delta": n  // entero entre -2 y 2
   },
   "follow_up_hooks": [
-    "Frase corta describiendo un gancho narrativo que la IA del próximo trimestre debería tener en cuenta."
+    "Frase corta con consecuencia que el próximo trimestre debe ejecutar (ej: 'Activar interconexión eléctrica con Portugal al 30% antes de Q3')."
   ]
 }
 
 Reglas:
+- Si hubo acuerdo con cifras → status "cerrado" e in_force_from "inmediato" (salvo que se diga otro plazo). Genera al menos un hook que ejecute ese acuerdo.
+- Si la reunión fue puramente expositiva → agreements: [].
 - NO inventes cambios macro (PIB, paro, etc). Esto NO es un cierre de trimestre.
-- Los deltas son pequeños porque hablar no es gobernar.
-- Si la reunión fue puramente expositiva sin acuerdos, los deltas pueden ser todos 0.`;
+- Los deltas son pequeños porque hablar no es gobernar — el impacto real llega cuando el motor del trimestre ejecute los hooks.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
