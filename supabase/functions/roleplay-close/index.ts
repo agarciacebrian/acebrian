@@ -12,25 +12,38 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM = `Eres el director de una simulación geopolítica. Acaba de cerrarse una REUNIÓN entre el jefe de Estado y actores convocados. La reunión NO avanza el tiempo del juego: solo deja un poso diplomático.
+const SYSTEM = `Eres el director de una simulación geopolítica de alto nivel. Acaba de cerrarse una REUNIÓN entre el jefe de Estado y actores convocados. La reunión NO avanza el tiempo del juego.
+
+PRINCIPIO CLAVE: a nivel de jefes de Estado los acuerdos verbales con porcentajes, plazos y reparto claros SE DAN POR CERRADOS Y EN EJECUCIÓN. No existen MoUs, contratos, ni "elevarlo a equipos". Si en la transcripción hay cifras concretas y un "sí" explícito o implícito de las partes, ES UN ACUERDO EFECTIVO y debes registrarlo como tal.
 
 Tu salida es un JSON estricto, en español, sin texto extra:
 {
-  "narrative": "2-3 frases muy concretas sobre qué deja la reunión: posturas, tensiones, compromisos verbales o ausencia de ellos. Sin floritura.",
+  "narrative": "2-3 frases muy concretas sobre qué se acordó (con cifras) o por qué no hubo acuerdo. Sin floritura ni jerga burocrática.",
+  "agreements": [
+    {
+      "title": "Título corto del acuerdo (ej: 'Coordinación energética hispano-portuguesa')",
+      "parties": ["Territorio jugador", "Portugal", "..."],
+      "terms": "Términos concretos: porcentajes, plazos, reparto, condiciones. Una o dos frases.",
+      "scope": "publico|privado|mixto",
+      "status": "cerrado|tentativo|rechazado",
+      "in_force_from": "inmediato|fecha-aproximada"
+    }
+  ],
   "diplomatic_shift": {
     "soft_power_delta": n,   // entero entre -1 y 1
     "autonomia_delta": n,    // entero entre -1 y 1
     "confort_diplomatico_delta": n  // entero entre -2 y 2
   },
   "follow_up_hooks": [
-    "Frase corta describiendo un gancho narrativo que la IA del próximo trimestre debería tener en cuenta."
+    "Frase corta con consecuencia que el próximo trimestre debe ejecutar (ej: 'Activar interconexión eléctrica con Portugal al 30% antes de Q3')."
   ]
 }
 
 Reglas:
+- Si hubo acuerdo con cifras → status "cerrado" e in_force_from "inmediato" (salvo que se diga otro plazo). Genera al menos un hook que ejecute ese acuerdo.
+- Si la reunión fue puramente expositiva → agreements: [].
 - NO inventes cambios macro (PIB, paro, etc). Esto NO es un cierre de trimestre.
-- Los deltas son pequeños porque hablar no es gobernar.
-- Si la reunión fue puramente expositiva sin acuerdos, los deltas pueden ser todos 0.`;
+- Los deltas son pequeños porque hablar no es gobernar — el impacto real llega cuando el motor del trimestre ejecute los hooks.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -141,21 +154,33 @@ Devuelve el JSON estricto descrito en el sistema.`;
       }
     }
 
+    // Acuerdos cerrados/tentativos detectados por la IA
+    const agreements = Array.isArray(parsed.agreements) ? parsed.agreements.slice(0, 6) : [];
+    const closedAgreements = agreements.filter((a: any) => a?.status === "cerrado");
+    const agreementsTxt = agreements.length > 0
+      ? agreements.map((a: any) =>
+          `• [${(a.status ?? "tentativo").toUpperCase()}] ${a.title ?? "Acuerdo"} — ${(a.parties ?? []).join(", ")}. ${a.terms ?? ""} (${a.scope ?? "mixto"}, vigor: ${a.in_force_from ?? "inmediato"}).`
+        ).join("\n")
+      : "";
+
     // Evento informativo (mismo turno, misma fecha — NO avanza)
     await supabase.from("game_events").insert({
       game_id: game.id, turn_number: game.turn_number, lore_date: game.lore_date,
       category: "diplomatico",
-      title: `Reunión — ${session.topic}`,
-      body: `${narrative}\n\nConvocados: ${(session.convocados ?? []).map((c: any) => c.name).join(", ") || "—"}. Intercambios: ${session.exchange_count}.`,
-      severity: "info",
+      title: closedAgreements.length > 0
+        ? `Acuerdo cerrado — ${session.topic}`
+        : `Reunión — ${session.topic}`,
+      body: `${narrative}${agreementsTxt ? `\n\nAcuerdos:\n${agreementsTxt}` : ""}\n\nConvocados: ${(session.convocados ?? []).map((c: any) => c.name).join(", ") || "—"}.`,
+      severity: closedAgreements.length > 0 ? "alerta" : "info",
       actors: session.convocados ?? [],
     });
 
-    // Guardar resumen + ganchos en la sesión para que el próximo `game-turn` los recoja
-    const hooks = Array.isArray(parsed.follow_up_hooks) ? parsed.follow_up_hooks.slice(0, 4) : [];
-    const fullSummary = hooks.length > 0
-      ? `${narrative}\n\nGanchos: ${hooks.map((h: string) => `• ${h}`).join(" ")}`
-      : narrative;
+    // Guardar resumen + acuerdos + ganchos en la sesión para que el próximo `game-turn` los ejecute
+    const hooks = Array.isArray(parsed.follow_up_hooks) ? parsed.follow_up_hooks.slice(0, 6) : [];
+    const parts: string[] = [narrative];
+    if (agreementsTxt) parts.push(`ACUERDOS EN VIGOR:\n${agreementsTxt}`);
+    if (hooks.length > 0) parts.push(`Ejecutar el próximo trimestre:\n${hooks.map((h: string) => `• ${h}`).join("\n")}`);
+    const fullSummary = parts.join("\n\n");
 
     await supabase.from("roleplay_sessions").update({
       status: "cerrada", summary: fullSummary, closed_at: new Date().toISOString(),
