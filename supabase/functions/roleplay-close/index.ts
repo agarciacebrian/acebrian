@@ -154,21 +154,33 @@ Devuelve el JSON estricto descrito en el sistema.`;
       }
     }
 
+    // Acuerdos cerrados/tentativos detectados por la IA
+    const agreements = Array.isArray(parsed.agreements) ? parsed.agreements.slice(0, 6) : [];
+    const closedAgreements = agreements.filter((a: any) => a?.status === "cerrado");
+    const agreementsTxt = agreements.length > 0
+      ? agreements.map((a: any) =>
+          `• [${(a.status ?? "tentativo").toUpperCase()}] ${a.title ?? "Acuerdo"} — ${(a.parties ?? []).join(", ")}. ${a.terms ?? ""} (${a.scope ?? "mixto"}, vigor: ${a.in_force_from ?? "inmediato"}).`
+        ).join("\n")
+      : "";
+
     // Evento informativo (mismo turno, misma fecha — NO avanza)
     await supabase.from("game_events").insert({
       game_id: game.id, turn_number: game.turn_number, lore_date: game.lore_date,
       category: "diplomatico",
-      title: `Reunión — ${session.topic}`,
-      body: `${narrative}\n\nConvocados: ${(session.convocados ?? []).map((c: any) => c.name).join(", ") || "—"}. Intercambios: ${session.exchange_count}.`,
-      severity: "info",
+      title: closedAgreements.length > 0
+        ? `Acuerdo cerrado — ${session.topic}`
+        : `Reunión — ${session.topic}`,
+      body: `${narrative}${agreementsTxt ? `\n\nAcuerdos:\n${agreementsTxt}` : ""}\n\nConvocados: ${(session.convocados ?? []).map((c: any) => c.name).join(", ") || "—"}.`,
+      severity: closedAgreements.length > 0 ? "alerta" : "info",
       actors: session.convocados ?? [],
     });
 
-    // Guardar resumen + ganchos en la sesión para que el próximo `game-turn` los recoja
-    const hooks = Array.isArray(parsed.follow_up_hooks) ? parsed.follow_up_hooks.slice(0, 4) : [];
-    const fullSummary = hooks.length > 0
-      ? `${narrative}\n\nGanchos: ${hooks.map((h: string) => `• ${h}`).join(" ")}`
-      : narrative;
+    // Guardar resumen + acuerdos + ganchos en la sesión para que el próximo `game-turn` los ejecute
+    const hooks = Array.isArray(parsed.follow_up_hooks) ? parsed.follow_up_hooks.slice(0, 6) : [];
+    const parts: string[] = [narrative];
+    if (agreementsTxt) parts.push(`ACUERDOS EN VIGOR:\n${agreementsTxt}`);
+    if (hooks.length > 0) parts.push(`Ejecutar el próximo trimestre:\n${hooks.map((h: string) => `• ${h}`).join("\n")}`);
+    const fullSummary = parts.join("\n\n");
 
     await supabase.from("roleplay_sessions").update({
       status: "cerrada", summary: fullSummary, closed_at: new Date().toISOString(),
