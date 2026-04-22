@@ -116,13 +116,24 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    const { gameId, action } = await req.json();
+    const { gameId, action, timeAdvance } = await req.json();
     if (!gameId || !action?.trim()) {
       return new Response(JSON.stringify({ error: "gameId y action requeridos" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Validar timeAdvance (con default a trimestre por compatibilidad)
+    const ta = timeAdvance && typeof timeAdvance === "object" ? timeAdvance : { unit: "months", amount: 3 };
+    const unit: "days" | "weeks" | "months" =
+      ta.unit === "days" || ta.unit === "weeks" || ta.unit === "months" ? ta.unit : "months";
+    let amount = Number(ta.amount);
+    if (!Number.isFinite(amount) || amount <= 0) amount = unit === "months" ? 3 : 1;
+    amount = Math.round(amount);
+    if (unit === "days") amount = Math.min(amount, 30);
+    else if (unit === "weeks") amount = Math.min(amount, 12);
+    else amount = Math.min(amount, 12);
 
     // Cargar contexto
     const [{ data: game }, { data: snaps }, { data: caps }, { data: evs }, { data: meets }] =
@@ -138,12 +149,16 @@ serve(async (req) => {
     const lastSnapshot = snaps?.[0];
     if (!lastSnapshot) throw new Error("Falta snapshot inicial");
 
-    const nextLoreDate = addQuarter(game.lore_date);
+    const nextLoreDate = advanceDate(game.lore_date, unit, amount);
     const nextTurn = game.turn_number + 1;
+    const timeDays = durationDays(unit, amount);
+    const timeLabel = durationLabel(unit, amount);
 
     const userPrompt = buildUserPrompt({
       game,
       next_lore_date: nextLoreDate,
+      time_label: timeLabel,
+      time_days: timeDays,
       last_snapshot: {
         macro: lastSnapshot.macro,
         energy: lastSnapshot.energy,
