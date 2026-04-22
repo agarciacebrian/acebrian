@@ -399,9 +399,13 @@ Si no hay nada coherente que generar este turno, devuelve {"requests": []}.`;
       console.warn("Error generando solicitudes (no bloqueante):", reqErr);
     }
 
-    return new Response(JSON.stringify({ ok: true, turn: nextTurn, lore_date: nextLoreDate, narrative: parsed.narrative }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({
+      ok: true,
+      turn: nextTurn,
+      lore_date: nextLoreDate,
+      narrative: parsed.narrative,
+      time_label: timeLabel,
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("game-turn error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown" }), {
